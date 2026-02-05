@@ -1,4 +1,4 @@
-# Layer 1 Finance Domain Classifier - Dependencies
+# Classification RAG Guardrail - Dependencies (Layer 1 & Layer 2)
 
 # Core ML/DL
 torch>=2.0.0
