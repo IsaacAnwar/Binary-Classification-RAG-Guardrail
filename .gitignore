@@ -8,6 +8,7 @@ pytorch_model.bin
 model.safetensors
 layer_2_best
 bestmodelsV1
+layer2_contextual_model/
 
 #Datasets
 *.csv
