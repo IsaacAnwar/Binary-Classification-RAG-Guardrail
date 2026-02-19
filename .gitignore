@@ -1,22 +1,26 @@
-# Model checkpoints and outputs
+# ========================
+# Model Checkpoints & Outputs
+# ========================
 layer1_model/
 layer1_model_unfrozen/
 layer2_model/
+layer2_contextual_model/
+layer_2_best/
+bestmodelsV1/
 *.safetensors
 *.bin
 pytorch_model.bin
 model.safetensors
-layer_2_best
-bestmodelsV1
-layer2_contextual_model/
 
-#Datasets
+# ========================
+# Datasets
+# ========================
 *.csv
-
-# Processed datasets
 processed_dataset/
 
+# ========================
 # Python
+# ========================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -26,33 +30,50 @@ __pycache__/
 dist/
 build/
 
-# Virtual environments
+# ========================
+# Virtual Environments
+# ========================
 .venv/
 venv/
 env/
 ENV/
 
+# ========================
 # Jupyter Notebook
+# ========================
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
+# ========================
 # IDE
+# ========================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
+# ========================
 # OS
+# ========================
 .DS_Store
 Thumbs.db
 *.log
 
-# HuggingFace cache
+# ========================
+# HuggingFace
+# ========================
 .cache/
 huggingface/
 
-# Training logs
+# ========================
+# Training Logs
+# ========================
 runs/
 logs/
 wandb/
+
+# ========================
+# Misc
+# ========================
+CLAUDE.md
