@@ -1,141 +1,168 @@
 # Classification RAG Guardrail
 
-A two-layer classification microservice that acts as a guardrail for AI-powered finance interview systems. It ensures only relevant, safe, and compliant queries reach the main interview orchestrator.
+A two-layer classification microservice that acts as a guardrail for AI-powered finance interview systems. It uses fine-tuned [ModernBERT](https://huggingface.co/answerdotai/ModernBERT-base) models to ensure only relevant, safe, and compliant queries reach the main interview orchestrator.
 
-## Overview
-
-This microservice implements a **layered defense architecture** with two specialized BERT-based classifiers:
-
-- **Layer 1 (Domain Classifier)**: Fast binary classification determining if a query is finance-related
-- **Layer 2 (Intent Classifier)**: Multi-class classification for query intent/safety analysis
-
-The two-layer design enables a very quick classification of a user query to be used as a router in agentic systems; allowing the control of which specialized agents handles the user query.
+---
 
 ## Architecture
 
 ```
-User Query
-    │
-    ▼
-┌─────────────────┐
-│    Layer 1      │
-│ Domain Classifier│
-│ (Finance/Non)   │
-└────────┬────────┘
-         │
-    Is Finance?
-    /        \
-   No         Yes
-   │           │
-   ▼           ▼
- Flagged->┌─────────────────┐
-          │    Layer 2      │
-          │ Intent Classifier│
-          │ (6 categories)  │
-          └────────┬────────┘
-                   │
-                   ▼
-            Classification
-              Response
+                        User Query
+                            |
+                            v
+                 +--------------------+
+                 |      Layer 1       |
+                 |  Domain Classifier |
+                 |  (safe / dangerous)|
+                 +--------+-----------+
+                          |
+                    Is Safe to Proceed?
+                    /          \
+                  No            Yes
+                  |              |
+                  v              v
+              Flagged    +--------------------+
+                         |      Layer 2       |
+                         |  Intent Classifier |
+                         |   (4 intents, 3 stages)   
+                         +--------+-----------+
+                                  |
+                                  v
+                          Agent Routing
+                            Response
 ```
 
-## Layer Classifications
+**Layer 1** is a fast binary classifier that determines whether a query is toxic or not. **Layer 2** is a context-aware multi-class classifier that categorizes the intent of the user query, gathering context from the previous agent response and the current interview stage.
 
-### Layer 1 - Domain Classification
-| Label | Description |
-|-------|-------------|
-| `finance` | Query is related to finance topics |
-| `non_finance` | Query is not finance-related |
+## Example of why context is important**
+Candidate message: "Can you explain what you mean by that?"
 
-### Layer 2 - Intent Classification
+Without context — the classifier has to guess:
+
+    Is this inquiry (asking for clarification on the question)?
+    Is this small_talk?
+    Is it answer_submission where they're quoting something back?
+
+It's genuinely ambiguous in isolation.
+---
+
+## Classifications
+
+### Layer 1 -- Domain
+
 | Label | Description |
-|-------|-------------|
+|---|---|
+| `safe` | Query is **not** and attempt of red-teaming, prompt injection, or other malicious intent |
+| `dangerous` | Query **is** an attempt of red-teaming, prompt injection, or other malicious intent |
+
+### Layer 2 -- Intent
+
+| Label | Description |
+|---|---|
 | `answer_submission` | Candidate providing an answer |
-| `clarification_request` | Asking for clarification |
-| `process_inquiry` | Questions about the interview process |
-| `challenge_assessment` | Challenging or questioning the assessment |
+| `inquiry` | Asking for clarification |
 | `off_topic` | Off-topic within finance context |
-| `small_talk` | General conversation/small talk |
+| `small_talk` | General conversation / small talk |
 
-## Installation
+### Interview Stages (Layer 2 context)
+
+| Stage | ID |
+|---|---|
+| `opening` | 0 |
+| `technical_depth` | 1 |
+| `closing` | 2 |
+
+---
+
+## Getting Started
 
 ### Prerequisites
+
 - Python 3.11+
-- pip or conda
+- pip
 
-### Setup
+### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd Classification-RAG-gaurdrail
-   ```
+```bash
+git clone <repository-url>
+cd Classification-RAG-gaurdrail
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-2. **Create a virtual environment**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On macOS/Linux
-   # or
-   venv\Scripts\activate     # On Windows
-   ```
+### Configuration
 
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+Copy the example environment file and update the model checkpoint paths to match your trained models:
 
-4. **Train the models** (if not already trained)
-   - Run `layer1/layer1_training.ipynb` for Layer 1 model
-   - Run `layer2/layer2_training.ipynb` for Layer 2 model
+```bash
+cp .env.example .env
+```
 
-## Usage
+Then edit `.env` with the correct checkpoint paths:
 
-### Running Locally
+```
+LAYER1_MODEL_PATH=./layer1/layer1_model/checkpoint-XXX
+LAYER2_MODEL_PATH=./layer2/layer2_contextual_model/checkpoint-XXX
+```
+
+### Training Models
+
+If you don't have trained checkpoints yet:
+
+1. Prepare training data in CSV format (see `layer1/` and `layer2/` directories for schema)
+2. Run `layer1/layer1_training.ipynb` to train the Layer 1 model
+3. Run `layer2/layer2_training.ipynb` to train the Layer 2 model
+4. Update the checkpoint paths in your `.env`
+
+### Running the Server
 
 ```bash
 uvicorn main:app --reload
 ```
 
-The API will be available at `http://127.0.0.1:8000`
+The API will be available at `http://127.0.0.1:8000`. Interactive docs at [`/docs`](http://127.0.0.1:8000/docs).
 
-### API Documentation
+---
 
-Once running, visit:
-- Swagger UI: `http://127.0.0.1:8000/docs`
-- ReDoc: `http://127.0.0.1:8000/redoc`
+## API Reference
 
-## API Endpoints
+### `POST /classify`
 
-### POST `/classify`
-
-Classify a user message through both layers.
+Classify a user query through both layers.
 
 **Request:**
+
 ```json
 {
-  "message": "What is the WACC formula?"
+  "query": "What is the WACC formula?",
+  "prev_agent_response": "Let's discuss valuation methods.",
+  "interview_stage": "technical_depth"
 }
 ```
 
 **Response:**
+
 ```json
 {
   "layer1": {
-    "prediction": "finance",
-    "confidence": 0.9876
+    "blocked": false
   },
   "layer2": {
-    "prediction": "answer_submission",
+    "label": "answer_submission",
     "confidence": 0.8543
-  }
+  },
+  "query": "What is the WACC formula?",
+  "prev_agent_response": "Let's discuss valuation methods."
 }
 ```
 
-### GET `/health`
+### `GET /health`
 
 Health check endpoint.
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -143,132 +170,73 @@ Health check endpoint.
 }
 ```
 
-### Example Usage with cURL
+### Example -- cURL
 
 ```bash
-# Health check
-curl http://127.0.0.1:8000/health
-
-# Classify a query
 curl -X POST http://127.0.0.1:8000/classify \
   -H "Content-Type: application/json" \
-  -d '{"message": "How do you calculate DCF?"}'
+  -d '{
+    "query": "How do you calculate DCF?",
+    "prev_agent_response": "",
+    "interview_stage": "opening"
+  }'
 ```
 
-### Example Usage with Python
-
-```python
-import requests
-
-response = requests.post(
-    "http://127.0.0.1:8000/classify",
-    json={"message": "What is the WACC formula?"}
-)
-print(response.json())
-```
-
-## Docker Deployment
-
-### Build the Docker image
+## Docker
 
 ```bash
 docker build -t guardrail-service .
-```
-
-### Run the container
-
-```bash
 docker run -p 8000:8000 guardrail-service
-```
-
-## Cloud Deployment (Google Cloud Run)
-
-### Deploy with GPU support
-
-```bash
-# Build and push to Google Container Registry
-gcloud builds submit --tag gcr.io/YOUR_PROJECT/guardrail-service
-
-# Deploy to Cloud Run with GPU
-gcloud run deploy guardrail-service \
-  --image gcr.io/YOUR_PROJECT/guardrail-service \
-  --gpu 1 \
-  --gpu-type nvidia-l4 \
-  --memory 8Gi \
-  --cpu 4 \
-  --region us-central1 \
-  --allow-unauthenticated
 ```
 
 ## Project Structure
 
 ```
 Classification-RAG-gaurdrail/
-├── main.py                 # FastAPI application
-├── Dockerfile              # Docker configuration
-├── requirements.txt        # Python dependencies
-├── project_overview.md     # Detailed project documentation
-├── README.md               # This file
+├── main.py                          # FastAPI application
+├── .env                             # Environment config (git-ignored)
+├── .env.example                     # Template for .env
+├── requirements.txt                 # Python dependencies
+├── Dockerfile                       # Container configuration
 │
 ├── layer1/
-│   ├── layer1_training.ipynb   # Layer 1 training notebook
-│   ├── combined_data.csv       # Layer 1 training data
-│   └── layer1_model/           # Trained Layer 1 checkpoints
+│   ├── layer1_training.ipynb        # Layer 1 training notebook
+│   ├── combined_data.csv            # Layer 1 training data
+│   └── layer1_model/                # Trained checkpoints (git-ignored)
 │       └── checkpoint-*/
 │
 └── layer2/
-    ├── layer2_training.ipynb   # Layer 2 training notebook
-    ├── layer2_data.csv         # Layer 2 training data
-    └── layer2_model/           # Trained Layer 2 checkpoints
-        └── checkpoint-*/
+    ├── layer2_training.ipynb        # Layer 2 training notebook
+    ├── layer2_contextual_data.csv   # Layer 2 training data
+    └── layer2_contextual_model/     # Trained checkpoints (git-ignored)
+        ├── checkpoint-*/
+        └── label_mappings.json
 ```
+
+---
 
 ## Model Details
 
 | Property | Layer 1 | Layer 2 |
-|----------|---------|---------|
-| Base Model | ModernBERT-base | ModernBERT-base |
-| Task | Binary Classification | Multi-class Classification |
-| Classes | 2 | 6 |
-| Max Sequence Length | 128 tokens | 128 tokens |
+|---|---|---|
+| Base Model | `answerdotai/ModernBERT-base` | `answerdotai/ModernBERT-base` |
+| Task | Binary classification | Multi-class classification |
+| Classes | 2 (`safe`, `dangerous`) | 5 (see table above) |
+| Max Sequence Length | 128 tokens | 256 tokens |
+| Context Inputs | Text only | Text + prev response + interview stage |
+| Architecture | Standard classification head | Custom `ContextAwareLayer2Classifier` with 32-dim stage embedding |
 
-## Performance Targets
+---
 
-| Metric | Target |
-|--------|--------|
-| Layer 1 Latency | < 20ms (CPU), < 5ms (GPU) |
-| Layer 2 Latency | < 20ms (CPU), < 5ms (GPU) |
-| F1 Score | > 90% |
-| Precision | > 95% |
+## Environment Variables
 
-## Dependencies
+| Variable | Description | Default |
+|---|---|---|
+| `LAYER1_MODEL_PATH` | Path to Layer 1 checkpoint | `./layer1/layer1_model/checkpoint-420` |
+| `LAYER2_MODEL_PATH` | Path to Layer 2 checkpoint | `./layer2/layer2_contextual_model/checkpoint-1467` |
+| `LAYER2_MAPPINGS_PATH` | Path to Layer 2 tokenizer + label mappings | `./layer2/layer2_contextual_model` |
+| `LAYER1_BLOCK_THRESHOLD` | Probability threshold for flagging finance queries | `0.8` |
+| `HOST` | Server bind address | `0.0.0.0` |
+| `PORT` | Server port | `8000` |
 
-Core dependencies (see `requirements.txt` for versions):
-- PyTorch
-- Transformers (HuggingFace)
-- FastAPI
-- Uvicorn
-- scikit-learn
-- pandas
-- numpy
-
-## Development
-
-### Training New Models
-
-1. Prepare your training data in CSV format with `text` and `label` columns
-2. Open the respective training notebook (`layer1/` or `layer2/`)
-3. Run all cells to train and save the model
-4. Update the model path in `main.py` if needed
-
-### Adding New Endpoints
-
-The FastAPI application in `main.py` can be extended with additional endpoints as needed.
-
-## License
-
-[Add your license here]
-
-## Contributing
-
-[Add contribution guidelines here]
+---

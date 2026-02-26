@@ -11,14 +11,16 @@ from transformers import (
 import torch
 import torch.nn as nn
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 import json
 import os
 
+load_dotenv()
 
-# --- Model paths ---
-LAYER1_MODEL_PATH = "./layer1/layer1_model/checkpoint-420"
-LAYER2_MODEL_PATH = "./layer2/layer2_contextual_model/checkpoint-1467"
-LAYER2_MAPPINGS_PATH = "./layer2/layer2_contextual_model"
+# --- Model paths (configurable via .env) ---
+LAYER1_MODEL_PATH = os.getenv("LAYER1_MODEL_PATH", "./layer1/layer1_model/checkpoint-420")
+LAYER2_MODEL_PATH = os.getenv("LAYER2_MODEL_PATH", "./layer2/layer2_contextual_model/checkpoint-1467")
+LAYER2_MAPPINGS_PATH = os.getenv("LAYER2_MAPPINGS_PATH", "./layer2/layer2_contextual_model")
 
 # --- Layer 1 label mapping ---
 LAYER1_ID2LABEL = {0: "safe", 1: "dangerous"}
@@ -32,8 +34,8 @@ class ContextAwareLayer2Config(PretrainedConfig):
     def __init__(
         self,
         model_name: str = "answerdotai/ModernBERT-base",
-        num_labels: int = 5,
-        num_stages: int = 4,
+        num_labels: int = 4,
+        num_stages: int = 3,
         stage_embed_dim: int = 32,
         hidden_dim: int = 256,
         dropout: float = 0.3,
@@ -174,7 +176,7 @@ app = FastAPI(
 
 # --- Request / Response schemas ---
 
-VALID_STAGES = {"opening", "technical_depth", "challenge", "closing"}
+VALID_STAGES = {"opening", "technical_depth", "closing"}
 
 
 class ClassifyRequest(BaseModel):
@@ -192,7 +194,7 @@ class ClassifyRequest(BaseModel):
         return v
 
 
-LAYER1_BLOCK_THRESHOLD = 0.8
+LAYER1_BLOCK_THRESHOLD = float(os.getenv("LAYER1_BLOCK_THRESHOLD", "0.8"))
 
 
 class Layer1Result(BaseModel):

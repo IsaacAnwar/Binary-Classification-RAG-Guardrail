@@ -13,10 +13,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY main.py .
+COPY .env .
 
 # Copy model checkpoints
-COPY layer1_model/ ./layer1_model/
-COPY layer2_model/ ./layer2_model/
+COPY layer1/layer1_model/ ./layer1/layer1_model/
+COPY layer2/layer2_contextual_model/ ./layer2/layer2_contextual_model/
 
 # Expose port
 EXPOSE 8000
